@@ -60,6 +60,7 @@ class SymbolFeed:
     c: np.ndarray = field(init=False)
     v: np.ndarray = field(init=False)
 
+
     def __post_init__(self) -> None:
         index = pd.DatetimeIndex(self.bars.index)
         self.close_ns = bar_close_ns(index, self.instrument)
@@ -119,7 +120,7 @@ def fit_lots(
 
 @dataclass
 class _Position:
-    quantity: int = 0
+    quantity: float = 0
     entry_index: int = -1
     trade: Trade | None = None
     peak: float = 0.0
@@ -228,8 +229,6 @@ class Simulator:
 
     def _budget(self) -> float:
         equity = self.equity()
-        if self.sizer == "all_in":
-            return self.cash
         if self.sizer == "equal_weight":
             return min(self.cash, equity / self.pf.max_positions)
         if self.sizer == "percent_equity":
@@ -238,6 +237,8 @@ class Simulator:
         if self.sizer == "fixed_value":
             assert self.pf.value is not None
             return min(self.cash, self.pf.value)
+        if self.sizer in ("all_in", "all_in_frac"):
+            return self.cash
         return self.cash  # fixed_lots: bounded by cash only
 
     def _buy(self, feed: SymbolFeed, i: int, base_price: float, reason: str, kind: str) -> None:
@@ -245,16 +246,30 @@ class Simulator:
         lot = inst.lot_size
         price = min(base_price + self._slip(base_price, feed, i), feed.h[i])
         budget = self._budget()
-        if self.sizer == "fixed_lots":
-            max_lots = self.pf.lots
-        else:
-            max_lots = int(budget / price // lot) if price > 0 else 0
-        if self.ex.max_volume_pct is not None:
-            max_lots = min(max_lots, int(feed.v[i] * self.ex.max_volume_pct // lot))
         limit = min(budget, self.cash)
-        qty, fees = fit_lots(
-            max_lots, lot, price, lambda q: self._fees("BUY", q, price, feed, i), limit
-        )
+        if self.sizer == "all_in_frac":
+            qty = limit / price
+            for _ in range(5):
+                f = self._fees("BUY", qty, price, feed, i)
+                new_qty = (limit - f.total) / price
+                if abs(new_qty - qty) < 1e-9:
+                    qty = new_qty
+                    break
+                qty = new_qty
+            qty = math.floor(qty * 1e6) / 1e6
+            if self.ex.max_volume_pct is not None:
+                qty = min(qty, feed.v[i] * self.ex.max_volume_pct)  # ← 加在这里
+            fees = self._fees("BUY", qty, price, feed, i)  # 对最终 qty 计费
+        else:
+            if self.sizer == "fixed_lots":
+                max_lots = self.pf.lots
+            else:
+                max_lots = int(budget / price // lot) if price > 0 else 0
+            if self.ex.max_volume_pct is not None:
+                max_lots = min(max_lots, int(feed.v[i] * self.ex.max_volume_pct // lot))  # 原逻辑不动
+            qty, fees = fit_lots(
+                max_lots, lot, price, lambda q: self._fees("BUY", q, price, feed, i), limit
+            )
         if qty <= 0:
             need = lot * price + self._fees("BUY", lot, price, feed, i).total
             self._event(feed, i, "buy_skipped", f"budget {limit:,.2f} < one lot {need:,.2f}")
@@ -458,6 +473,8 @@ class Simulator:
         equity = np.empty(len(times))
         cash = np.empty(len(times))
         exposure = np.empty(len(times))
+        holdings = np.empty(len(times))
+        #holdings_curve = np.empty(len(times))
 
         for step, t in enumerate(times):
             active: list[tuple[SymbolFeed, int]] = []
@@ -489,10 +506,11 @@ class Simulator:
                     pos.peak = max(pos.peak, f.h[i])
             for f, i in active:
                 self._decide(f, i)
-            holdings = self._holdings_value()
-            equity[step] = self.cash + holdings
+            h = self._holdings_value()
+            equity[step] = self.cash + h
             cash[step] = self.cash
-            exposure[step] = holdings / equity[step] if equity[step] > 0 else 0.0
+            exposure[step] = h / equity[step] if equity[step] > 0 else 0.0
+            holdings[step] = h
 
         for f in feeds:
             order = self.pending.pop(f.symbol, None)
@@ -508,6 +526,7 @@ class Simulator:
                 equity[-1] = self.cash + self._holdings_value()
                 cash[-1] = self.cash
                 exposure[-1] = 0.0 if equity[-1] <= 0 else self._holdings_value() / equity[-1]
+                holdings[-1] = self._holdings_value()  # ← 新增这一行
         for f in feeds:
             pos = self.positions[f.symbol]
             if pos.quantity and pos.trade is not None:
@@ -532,6 +551,7 @@ class Simulator:
             events=self.events,
             event_counts=self.event_counts,
             symbols=[f.symbol for f in feeds],
+            holdings=pd.Series(holdings, index=index, name="holdings"),
         )
 
 
@@ -563,16 +583,16 @@ def buy_and_hold(
         inst, day = f.instrument, f.dates[i]
 
         def buy_fees(
-            q: int, inst: Instrument = inst, day: date = day, px: float = price
+                q: int, inst: Instrument = inst, day: date = day, px: float = price
         ) -> FeeBreakdown:
             return costs.fees("BUY", q, px, inst, day)
 
         qty, fb = fit_lots(int(sleeve / price // lot), lot, price, buy_fees, sleeve)
         left = sleeve - (qty * price + fb.total if qty > 0 else 0.0)
         closes = pd.Series(
-            f.c[f.first : f.last + 1], index=display_index(f.close_ns[f.first : f.last + 1], [f])
+            f.c[f.first: f.last + 1], index=display_index(f.close_ns[f.first: f.last + 1], [f])
         )
         closes = closes[~closes.index.duplicated(keep="last")]
-        value = (left + qty * closes).reindex(index).ffill().fillna(sleeve)
+        value = (qty * closes).reindex(index).ffill() - fb.total   # 仅持仓市值，扣除买入费
         total = total + value
     return total

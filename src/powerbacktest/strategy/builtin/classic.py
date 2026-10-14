@@ -55,10 +55,11 @@ class MACDStrategy(Strategy):
         p = self.params
         return MACD(bars["close"], p.fast_period, p.slow_period, p.signal_period)
 
+    #修改策略为上穿0轴买入，下穿0轴卖出
     def signals(self, bars: pd.DataFrame, ind: pd.DataFrame) -> pd.Series:
         if self.params.mode == "state":
-            return state(ind["dif"] > ind["dea"])
-        return events(CROSS(ind["dif"], ind["dea"]), CROSS(ind["dea"], ind["dif"]))
+            return state(ind["dif"] > 0)
+        return events(CROSS(ind["dif"], 0), CROSS(0, ind["dif"]))
 
 
 class MACrossParams(StrategyParams):

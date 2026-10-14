@@ -81,6 +81,7 @@ def _book_payload(book: Book, max_points: int) -> dict[str, Any]:
         "symbols": book.symbols,
         "metrics": clean(book.metrics),
         "equity": _series_points(book.equity, max_points),
+        "holdings": _series_points(book.holdings, max_points),  # 新增20261014
         "benchmark": _series_points(bench, max_points) if bench is not None else None,
         "benchmark_name": book.benchmark_name,
         "drawdown": _series_points(drawdown(book.equity, book.initial_capital), max_points),

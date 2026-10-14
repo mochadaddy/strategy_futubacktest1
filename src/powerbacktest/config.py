@@ -45,8 +45,8 @@ class BacktestConfig(_Model):
     strategy: str = "macd"
     params: dict[str, Any] = Field(default_factory=dict)
     symbols: list[str] = Field(default_factory=list)
-    start: dt.date
-    end: dt.date
+    start: dt.date | None = None  #日期能否自动生成不需要手动填写
+    end: dt.date | None = None    #日期能否自动生成不需要手动填写
     timeframe: str = "DAY"
     mode: Literal["scan", "portfolio"] = "scan"
     initial_capital: float = Field(100_000.0, gt=0)
@@ -79,8 +79,13 @@ class BacktestConfig(_Model):
     def _timeframe(cls, value: str) -> str:
         return str(Timeframe.parse(value))
 
+    # 日期能否自动生成不需要手动填写 26.10.13
     @model_validator(mode="after")
     def _dates(self) -> BacktestConfig:
+        if self.end is None:
+            self.end = dt.date.today() - dt.timedelta(days=1)
+        if self.start is None:
+            self.start = self.end.replace(year=self.end.year - 2)  # 或 dateutil.relativedelta
         if self.start > self.end:
             raise ValueError(f"start {self.start} is after end {self.end}")
         return self
@@ -113,7 +118,7 @@ class RiskConfig(_Model):
 class PortfolioConfig(_Model):
     # auto: all_in in scan mode, equal_weight in portfolio mode.
     sizer: Literal[
-        "auto", "all_in", "equal_weight", "percent_equity", "fixed_value", "fixed_lots"
+        "auto", "all_in", "equal_weight", "percent_equity", "fixed_value", "fixed_lots","all_in_frac"
     ] = "auto"
     max_positions: int = Field(5, ge=1)
     percent: float | None = Field(None, gt=0, le=1)

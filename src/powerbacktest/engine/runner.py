@@ -175,6 +175,7 @@ def _composite(books: list[Book], name: str) -> Book:
         equity=avg("equity", None),
         cash=avg("cash", None),
         exposure=avg("exposure", 0.0),
+        holdings=avg("holdings", 0.0),  # fill 用 0.0，空仓期是 0 而非本金20261014
         fills=[f for b in books for f in b.fills],
         trades=sorted((t for b in books for t in b.trades), key=lambda t: t.entry_time),
         symbols=[s for b in books for s in b.symbols],

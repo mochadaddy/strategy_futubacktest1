@@ -362,7 +362,7 @@ footer a { color: var(--ink-2); }
     dd.setData((book.drawdown || []).map(function (p) { return { time: p[0], value: p[1] * 100 }; }));
     ddChart.timeScale().fitContent();
 
-    var lastEq = book.equity.length ? book.equity[book.equity.length - 1][1] : null;
+    var lastEq = book.holdings.length ? book.holdings[book.holdings.length - 1][1] : null; /*20261014 equity换成holdings*/
     var lastB = book.benchmark && book.benchmark.length ? book.benchmark[book.benchmark.length - 1][1] : null;
     function eqLegend(v, b, t) {
       $("eqLegend").innerHTML = key(css("--s1"), sName, money(v)) + (bench ? key(css("--bench"), bName, money(b)) : "") +

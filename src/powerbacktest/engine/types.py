@@ -141,6 +141,7 @@ class Book:
     equity: pd.Series
     cash: pd.Series
     exposure: pd.Series
+    holdings: pd.Series  # 新增：持仓市值曲线20261014
     fills: list[Fill] = field(default_factory=list)
     trades: list[Trade] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
