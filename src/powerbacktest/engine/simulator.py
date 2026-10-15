@@ -593,6 +593,6 @@ def buy_and_hold(
             f.c[f.first: f.last + 1], index=display_index(f.close_ns[f.first: f.last + 1], [f])
         )
         closes = closes[~closes.index.duplicated(keep="last")]
-        value = (qty * closes).reindex(index).ffill() - fb.total   # 仅持仓市值，扣除买入费
+        value = (qty * closes).reindex(index).ffill() + left - fb.total  # 持仓市值+剩余现金
         total = total + value
     return total

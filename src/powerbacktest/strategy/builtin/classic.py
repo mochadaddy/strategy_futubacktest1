@@ -38,7 +38,7 @@ class MACDParams(StrategyParams):
 class MACDStrategy(Strategy):
     name = "macd"
     title = "MACD cross"
-    description = "Buy when DIF crosses above DEA, sell when it crosses below (TDX MACD)."
+    description = "Buy when DIF crosses above 0, sell when it crosses below (TDX MACD)."
     Params = MACDParams
     plots = (
         PlotSpec("dif", "lower", "line", "DIF"),
@@ -67,6 +67,7 @@ class MACrossParams(StrategyParams):
     long_window: int = Field(50, ge=2, le=1000)
     ma_type: Literal["sma", "ema"] = "sma"
     mode: Mode = "cross"
+    turn_bars: int = Field(3, ge=1, le=20)
 
     @model_validator(mode="after")
     def _order(self) -> MACrossParams:
@@ -79,7 +80,8 @@ class MACrossParams(StrategyParams):
 class MACrossStrategy(Strategy):
     name = "ma_cross"
     title = "Moving-average cross"
-    description = "Buy when the short MA crosses above the long MA, sell on the reverse cross."
+    description = ("Buy when the short MA crosses above the long MA while the long MA turns up;"
+                   "sell on the reverse cross while the long MA turns down.")
     Params = MACrossParams
     plots = (
         PlotSpec("ma_short", "price", "line", "MA short"),
@@ -88,7 +90,9 @@ class MACrossStrategy(Strategy):
     params: MACrossParams
 
     def warmup_bars(self) -> int:
-        return self.params.long_window * (3 if self.params.ma_type == "ema" else 1)
+        #return self.params.long_window * (3 if self.params.ma_type == "ema" else 1)
+        base = self.params.long_window * (3 if self.params.ma_type == "ema" else 1)
+        return base + 3 * self.params.turn_bars  # 方案二/三的嵌套 EMA 也需收敛
 
     def indicators(self, bars: pd.DataFrame) -> pd.DataFrame:
         p = self.params
@@ -103,9 +107,11 @@ class MACrossStrategy(Strategy):
 
     def signals(self, bars: pd.DataFrame, ind: pd.DataFrame) -> pd.Series:
         s, lg = ind["ma_short"], ind["ma_long"]
+        n = self.params.turn_bars
+        up, down = lg > REF(lg, n), lg < REF(lg, n)
         if self.params.mode == "state":
             return state((s > lg).where(lg.notna()))
-        return events(CROSS(s, lg), CROSS(lg, s))
+        return events(CROSS(s, lg) & up, CROSS(lg, s) & down)
 
 
 class KDJParams(StrategyParams):
