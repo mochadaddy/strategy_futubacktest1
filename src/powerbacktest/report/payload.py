@@ -72,7 +72,7 @@ def _book_payload(book: Book, max_points: int) -> dict[str, Any]:
     bench = None
     if book.benchmark is not None:
         bench = align_series(
-            book.benchmark, pd.DatetimeIndex(book.equity.index), book.initial_capital
+            book.benchmark, pd.DatetimeIndex(book.equity.index), book.initial_capital,
         )
     return {
         "name": book.name,

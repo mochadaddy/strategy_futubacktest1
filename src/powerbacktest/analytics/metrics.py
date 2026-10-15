@@ -298,5 +298,10 @@ def book_metrics(book: Book, *, fallback_ppy: float, risk_free_rate: float = 0.0
                 book.buy_hold, pd.DatetimeIndex(book.equity.index), book.initial_capital
             ).iloc[-1]
         )
-        m["buy_hold_return"] = bh_final / book.initial_capital - 1
+        m["buy_hold_return"] = float(
+            align_series(
+                book.buy_hold, pd.DatetimeIndex(book.equity.index),
+                book.initial_capital, rebase=True,
+            ).iloc[-1]
+        ) / book.initial_capital - 1
     return m

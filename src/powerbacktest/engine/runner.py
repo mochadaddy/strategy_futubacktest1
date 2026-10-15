@@ -302,9 +302,9 @@ def run_on_bars(
             # Rebased per book, so a symbol that starts trading late (IPO, short history) is
             # compared with the index over its own trading span only.
             book.benchmark = align_series(
-                bench_series, pd.DatetimeIndex(book.equity.index), capital, rebase=True
+                book.buy_hold, pd.DatetimeIndex(book.equity.index), capital, rebase=True
             )
-            book.benchmark_name = bench_name
+            book.benchmark_name = "Buy & hold"
         else:
             book.benchmark, book.benchmark_name = book.buy_hold, "Buy & hold"
         scale = book.metrics.pop("_scale", None)
